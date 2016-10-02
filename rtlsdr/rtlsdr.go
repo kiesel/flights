@@ -3,6 +3,18 @@ package rtlsdr
 // #cgo CFLAGS: -I/usr/local/include
 // #cgo pkg-config: librtlsdr
 // #include "rtl-sdr.h"
+// #include <stdlib.h>
+//
+// rtlsdr_dev_t* rtlsdr_open_helper(uint32_t index) {
+//   rtlsdr_dev_t *ptr;
+//   int result = rtlsdr_open(&ptr, index);
+//
+//   if (0 != result) {
+//     return NULL;
+//   }
+//
+//   return ptr;
+// }
 import "C"
 
 import (
@@ -11,7 +23,7 @@ import (
 )
 
 type Device struct {
-	rtlsdr_dev_t C.struct_rtlsdr_dev_t
+	handle *C.struct_rtlsdr_dev
 }
 
 type Error struct {
@@ -23,38 +35,68 @@ func (this *Error) Error() string {
 }
 
 // RTLSDR_API uint32_t rtlsdr_get_device_count(void);
-func Get_device_count() int {
+func GetDeviceCount() int {
 	return int(C.rtlsdr_get_device_count())
 }
 
 // RTLSDR_API const char* rtlsdr_get_device_name(uint32_t index);
-func Get_device_name(index int) string {
+func GetDeviceName(index int) string {
 	return C.GoString(C.rtlsdr_get_device_name((C.uint32_t)(index)))
 }
 
 // RTLSDR_API int rtlsdr_open(rtlsdr_dev_t **dev, uint32_t index);
 func Open(index int) (*Device, error) {
-	dev := &Device{}
+	dev := C.rtlsdr_open_helper(((C.uint32_t)(index)))
 
-	result := C.rtlsdr_open(unsafe.Pointer(&dev.rtlsdr_dev_t), (C.uint32_t)(index))
-	fmt.Printf("Result = %d", result)
+	if unsafe.Pointer(dev) == unsafe.Pointer(nil) {
+		return nil, &Error{"Unable to open rtlsdr device."}
+	}
 
-	return dev, nil
+	return &Device{handle: dev}, nil
 }
 
 // RTLSDR_API int rtlsdr_close(rtlsdr_dev_t *dev);
 func (this *Device) Close() {
-	C.rtlsdr_close(unsafe.Pointer(&this.rtlsdr_dev_t))
+	C.rtlsdr_close((*C.struct_rtlsdr_dev_t)(unsafe.Pointer(this.handle)))
 }
 
 // RTLSDR_API int rtlsdr_set_tuner_gain(rtlsdr_dev_t *dev, int gain);
 func (this *Device) SetTunerGain(gain int) error {
-	if 0 != C.rtlsdr_set_tuner_gain(&this.rtlsdr_dev_t, (C.int)(gain)) {
-		return Error{"Could not set tuner gain."}
+	if 0 != C.rtlsdr_set_tuner_gain((*C.struct_rtlsdr_dev_t)(unsafe.Pointer(this.handle)), (C.int)(gain)) {
+		return &Error{"Could not set tuner gain."}
 	}
 
 	return nil
 }
+
+// RTLSDR_API int rtlsdr_set_tuner_gain_mode(rtlsdr_dev_t *dev, int manual);
+func (this *Device) SetTunerGainMode(manual int) error {
+	if res := C.rtlsdr_set_tuner_gain_mode((*C.struct_rtlsdr_dev_t)(unsafe.Pointer(this.handle)), ((C.int)(manual))); res != 0 {
+		return &Error{"Unable to set tuner gain mode."}
+	}
+
+	return nil
+}
+
+// RTLSDR_API int rtlsdr_get_tuner_gains(rtlsdr_dev_t *dev, int *gains);
+func (this *Device) GetTunerGains() ([]int, error) {
+	// First, ask how many gain values will be returned
+	numberOfGains := (int)(C.rtlsdr_get_tuner_gains(this.handle, (*C.int)(unsafe.Pointer(nil))))
+	fmt.Printf("Gain numer = %d\n", numberOfGains)
+
+	gains := make([]int, numberOfGains)
+	result := (C.rtlsdr_get_tuner_gains(this.handle, (*C.int)(unsafe.Pointer(&gains[0]))))
+	fmt.Printf("Gain result = %d\n", result)
+
+	if result <= 0 {
+		return []int{}, &Error{"Could not retrieve gain values."}
+	}
+
+	return gains, nil
+}
+
+// RTLSDR_API int rtlsdr_get_tuner_gain(rtlsdr_dev_t *dev);
+// RTLSDR_API int rtlsdr_set_tuner_if_gain(rtlsdr_dev_t *dev, int stage, int gain);
 
 // RTLSDR_API int rtlsdr_get_device_usb_strings(uint32_t index,
 // RTLSDR_API int rtlsdr_get_index_by_serial(const char *serial);
@@ -68,11 +110,7 @@ func (this *Device) SetTunerGain(gain int) error {
 // RTLSDR_API int rtlsdr_set_freq_correction(rtlsdr_dev_t *dev, int ppm);
 // RTLSDR_API int rtlsdr_get_freq_correction(rtlsdr_dev_t *dev);
 // RTLSDR_API enum rtlsdr_tuner rtlsdr_get_tuner_type(rtlsdr_dev_t *dev);
-// RTLSDR_API int rtlsdr_get_tuner_gains(rtlsdr_dev_t *dev, int *gains);
 // RTLSDR_API int rtlsdr_set_tuner_bandwidth(rtlsdr_dev_t *dev, uint32_t bw);
-// RTLSDR_API int rtlsdr_get_tuner_gain(rtlsdr_dev_t *dev);
-// RTLSDR_API int rtlsdr_set_tuner_if_gain(rtlsdr_dev_t *dev, int stage, int gain);
-// RTLSDR_API int rtlsdr_set_tuner_gain_mode(rtlsdr_dev_t *dev, int manual);
 // RTLSDR_API int rtlsdr_set_sample_rate(rtlsdr_dev_t *dev, uint32_t rate);
 // RTLSDR_API uint32_t rtlsdr_get_sample_rate(rtlsdr_dev_t *dev);
 // RTLSDR_API int rtlsdr_set_testmode(rtlsdr_dev_t *dev, int on);
