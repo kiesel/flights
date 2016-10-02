@@ -214,12 +214,13 @@ func (this *Device) ResetBuffer() {
 }
 
 // RTLSDR_API int rtlsdr_read_sync(rtlsdr_dev_t *dev, void *buf, int len, int *n_read);
-func (this *Device) ReadSync() (*[]byte, error) {
-	buflen := 8192
+func (this *Device) ReadSync(buflen int) (*[]byte, error) {
+	fmt.Printf("reading up to %d bytes\n", buflen)
 	buf := make([]byte, buflen)
 	n_read := (C.int)(0)
 	result := C.rtlsdr_read_sync(this.handle, unsafe.Pointer(&buf[0]), (C.int)(buflen), &n_read)
 
+	fmt.Printf("read %d bytes\n", (int)(n_read))
 	if result != 0 {
 		return nil, &Error{"Could not read bytes from device"}
 	}

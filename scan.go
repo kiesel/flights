@@ -41,18 +41,29 @@ func main() {
 		fmt.Printf("Device center freq: %v\n", device.GetCenterFreq())
 		fmt.Printf("Current sample rate: %v\n", device.GetSampleRate())
 
-		for loop := 0; loop < 1000; loop++ {
-			buf, err := device.ReadSync()
-			fmt.Printf("Read %d bytes ...\n", len(*buf))
-			fmt.Printf("%v", *buf)
+		// var channel = make(chan *[]byte)
+		// go processReceivedData(channel)
+
+		for loop := 0; loop < 10; loop++ {
+			fmt.Printf("Now reading ...\n")
+			buf, err := device.ReadSync(16)
 
 			if err != nil {
 				panic(err.Error())
 			}
 
+			fmt.Printf("Handing off data of len %d\n", len(*buf))
+			// channel <- buf
 		}
 
 		device.Close()
 	}
+}
 
+func processReceivedData(queue chan *[]byte) {
+	for {
+		fmt.Println("Waiting for data ...")
+		buf := <-queue
+		fmt.Printf("Received %d bytes for processing\n", len(*buf))
+	}
 }
